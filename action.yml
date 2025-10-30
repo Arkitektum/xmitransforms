@@ -1,0 +1,74 @@
+name: Generate pygeoapi config from SOSI XMI
+description: Transform a SOSI XMI model into a pygeoapi resources YAML file.
+author: Tor Kjetil Nilsen for Kartverket
+
+inputs:
+  url:
+    description: URL to the XMI model (optional when xmi is provided).
+    required: false
+  xmi:
+    description: Path to a local XMI file inside the calling workflow workspace (optional when url is provided).
+    required: false
+  output:
+    description: Output YAML path (relative to the calling workflow workspace).
+    required: false
+  username:
+    description: Username for HTTP basic auth against SOSI repository.
+    required: false
+    default: sosi
+  password:
+    description: Password for HTTP basic auth against SOSI repository.
+    required: false
+    default: sosi
+  working-directory:
+    description: Directory to run the transformer from.
+    required: false
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Generate pygeoapi YAML
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_XMI: ${{ inputs.xmi }}
+        INPUT_OUTPUT: ${{ inputs.output }}
+        INPUT_USERNAME: ${{ inputs.username }}
+        INPUT_PASSWORD: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+
+        args=()
+        if [[ -n "${INPUT_URL}" ]]; then
+          args+=(--url "${INPUT_URL}")
+        fi
+        if [[ -n "${INPUT_XMI}" ]]; then
+          args+=(--xmi "${INPUT_XMI}")
+        fi
+        if [[ -n "${INPUT_OUTPUT}" ]]; then
+          args+=(--output "${INPUT_OUTPUT}")
+        fi
+        if [[ -n "${INPUT_USERNAME}" ]]; then
+          args+=(--username "${INPUT_USERNAME}")
+        fi
+        if [[ -n "${INPUT_PASSWORD}" ]]; then
+          args+=(--password "${INPUT_PASSWORD}")
+        fi
+
+        if [[ ${#args[@]} -eq 0 ]]; then
+          echo "You must supply either 'url' or 'xmi' input." >&2
+          exit 1
+        fi
+
+        python "${GITHUB_ACTION_PATH}/transform_xmi_to_pygeoapiconfig.py" "${args[@]}"
+
+branding:
+  icon: file-text
+  color: blue
