@@ -181,6 +181,7 @@ class XMIModel:
         self.selection_classes: Set[str] = set()
         self.realization_supplier: Dict[str, Dict[str, Optional[str]]] = {}
         self.generalizations: Dict[str, List[str]] = {}
+        self.specializations: Dict[str, List[str]] = {}
         self._index_elements()
         self._assign_packages()
         self._collect_comments()
@@ -364,6 +365,8 @@ class XMIModel:
                     supers.append(general)
             if supers:
                 self.generalizations[elem_id] = supers
+                for super_id in supers:
+                    self.specializations.setdefault(super_id, []).append(elem_id)
 
     def _resolve_ref(self, node: Optional[ET.Element]) -> Optional[str]:
         if node is None:
@@ -399,6 +402,21 @@ class XMIModel:
                 return True
             current = self.package_parent.get(current)
         return False
+
+    def get_specializations(self, element_id: Optional[str]) -> List[str]:
+        if not element_id:
+            return []
+        seen: Set[str] = set()
+        ordered: List[str] = []
+        stack = list(self.specializations.get(element_id, []))
+        while stack:
+            candidate = stack.pop()
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            ordered.append(candidate)
+            stack.extend(self.specializations.get(candidate, []))
+        return ordered
 
     def get_class_attributes(self, class_id: str) -> List[ET.Element]:
         element = self.elements_by_id.get(class_id)
@@ -770,7 +788,16 @@ class JsonSchemaBuilder:
             if not type_ref.element_id:
                 raise TransformationError("Ufullstendig typeinformasjon")
             def_name = self.ensure_definition(type_ref.element_id)
-            return {"$ref": f"#/definitions/{def_name}"}
+            schema: Dict[str, Any] = {"$ref": f"#/definitions/{def_name}"}
+            if type_ref.category in {"class", "datatype"}:
+                specializations = self.model.get_specializations(type_ref.element_id)
+                if specializations:
+                    variants = [schema]
+                    for spec_id in specializations:
+                        spec_def = self.ensure_definition(spec_id)
+                        variants.append({"$ref": f"#/definitions/{spec_def}"})
+                    return {"oneOf": variants}
+            return schema
         raise TransformationError(f"Støtter ikke typekategorien {type_ref.category}")
 
     def _schema_for_primitive(self, name: Optional[str]) -> Dict[str, Any]:

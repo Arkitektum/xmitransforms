@@ -56,3 +56,33 @@ def test_jsonschema_transformer(tmp_path):
     data = json.loads(schema_file.read_text(encoding="utf-8"))
     assert "$schema" in data
     assert "resources" not in data
+
+
+def test_jsonschema_transformer_includes_specializations(tmp_path):
+    output_dir = tmp_path / "schemas"
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(REPO_ROOT / "transform_xmi_to_jsonschema.py"),
+            "--xmi",
+            str(SAMPLE_XMI),
+            "--output-dir",
+            str(output_dir),
+            "--package",
+            "EksempellMedArv",
+        ],
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    schema_file = output_dir / "eksempellmedarv.schema.json"
+    assert schema_file.exists()
+    data = json.loads(schema_file.read_text(encoding="utf-8"))
+    bestilling = data["definitions"]["Bestilling"]
+    kunde_schema = bestilling["properties"]["kunde"]
+    assert "oneOf" in kunde_schema
+    refs = {entry["$ref"] for entry in kunde_schema["oneOf"]}
+    assert "#/definitions/Akt\u00f8r" in refs
+    assert "#/definitions/Person" in refs
+    assert "Person" in data["definitions"]
