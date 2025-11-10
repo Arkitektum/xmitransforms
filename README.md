@@ -33,13 +33,13 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Generate pygeoapi YAML
-        uses: arkitektum/pygeoapiconfig@main
+        uses: arkitektum/xmitransforms@main
         with:
           url: ${{ github.event.inputs.xmi_url }}
           output: configs/admenheter.yaml
 ```
 
-Inputs for `arkitektum/pygeoapiconfig@main`:
+Inputs for `arkitektum/xmitransforms@main`:
 
 | Input              | Required | Default | Description |
 | ------------------ | -------- | ------- | ----------- |
@@ -53,13 +53,13 @@ Inputs for `arkitektum/pygeoapiconfig@main`:
 #### JSON Schema
 
 ```yaml
-name: Generate JSON Schema from SOSI XMI
+name: Generate JSON Schema from XMI
 
 on:
   workflow_dispatch:
     inputs:
       xmi_url:
-        description: URL to the SOSI XMI
+        description: URL to the XMI
         required: true
 
 jobs:
@@ -69,7 +69,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Generate JSON Schemas
-        uses: arkitektum/pygeoapiconfig/jsonschema@main
+        uses: arkitektum/xmitransforms/jsonschema@main
         with:
           url: ${{ github.event.inputs.xmi_url }}
           jsonschema-output-dir: schemas
@@ -78,7 +78,7 @@ jobs:
             EksempelMedVerdirestriksjoner
 ```
 
-Inputs for `arkitektum/pygeoapiconfig/jsonschema@main`:
+Inputs for `arkitektum/xmitransforms/jsonschema@main`:
 
 | Input                   | Required | Default       | Description |
 | ----------------------- | -------- | ------------- | ----------- |
