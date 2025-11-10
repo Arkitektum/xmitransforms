@@ -171,6 +171,7 @@ class XMIModel:
         self.package_name_by_id: Dict[str, str] = {}
         self.comments_by_element: Dict[str, List[str]] = {}
         self.begreps_by_element: Dict[str, str] = {}
+        self.elements_by_name: Dict[str, List[str]] = {}
         self.elements_by_concept: Dict[str, List[str]] = {}
         self.nullable_properties: Set[str] = set()
         self.code_metadata: Dict[str, Dict[str, str]] = {}
@@ -208,6 +209,7 @@ class XMIModel:
             name = elem.get("name")
             if name:
                 self.element_name_by_id[elem_id] = name
+                self.elements_by_name.setdefault(name, []).append(elem_id)
 
     def _assign_packages(self) -> None:
         def walk(node: ET.Element, current_package: Optional[str]) -> None:
@@ -392,6 +394,14 @@ class XMIModel:
         if not concept:
             return []
         return list(self.elements_by_concept.get(concept, []))
+
+    def alternatives_with_same_name(self, element_id: Optional[str]) -> List[str]:
+        if not element_id:
+            return []
+        name = self.element_name_by_id.get(element_id)
+        if not name:
+            return []
+        return [alt for alt in self.elements_by_name.get(name, []) if alt != element_id]
 
     def get_package_metadata(self, package_id: str) -> Dict[str, Optional[str]]:
         return self.losningsmodell_meta.get(package_id, {})
@@ -776,12 +786,24 @@ class JsonSchemaBuilder:
     def _compose_description_and_concept(self, element_id: str) -> Tuple[str, Optional[str]]:
         parts: List[str] = []
         documentation = self.model.get_documentation(element_id)
+        concept = self.model.get_begrepsreferanse(element_id)
+        if not documentation or not concept:
+            for alt_id in self.model.alternatives_with_same_name(element_id):
+                if not documentation:
+                    alt_doc = self.model.get_documentation(alt_id)
+                    if alt_doc:
+                        documentation = alt_doc
+                if not concept:
+                    alt_concept = self.model.get_begrepsreferanse(alt_id)
+                    if alt_concept:
+                        concept = alt_concept
+                if documentation and concept:
+                    break
         if documentation:
             parts.append(documentation)
-        begrep = self.model.get_begrepsreferanse(element_id)
-        if begrep:
-            parts.append(format_begrepsreferanse(begrep))
-        return " ".join(parts).strip(), begrep
+        if concept:
+            parts.append(format_begrepsreferanse(concept))
+        return " ".join(parts).strip(), concept
 
     def _build_property_schema(self, prop: ET.Element, type_ref: TypeRef) -> Dict[str, Any]:
         schema = self._schema_for_type(type_ref)
