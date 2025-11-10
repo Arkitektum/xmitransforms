@@ -1,0 +1,85 @@
+name: Generate JSON Schema from XMI UML models
+description: Transform a XMI model into JSON Schema files.
+author: Arkitektum / Brreg
+
+inputs:
+  url:
+    description: URL to the XMI model (optional when xmi is provided).
+    required: false
+  xmi:
+    description: Path to a local XMI file inside the calling workflow workspace (optional when url is provided).
+    required: false
+  jsonschema-output-dir:
+    description: Directory where JSON Schema files should be written.
+    required: false
+    default: jsonschemas
+  jsonschema-packages:
+    description: Optional newline separated list of package names to limit JSON Schema generation.
+    required: false
+  username:
+    description: Username for HTTP basic auth against SOSI repository.
+    required: false
+    default: sosi
+  password:
+    description: Password for HTTP basic auth against SOSI repository.
+    required: false
+    default: sosi
+  working-directory:
+    description: Directory to run the transformer from.
+    required: false
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Generate JSON Schemas
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_XMI: ${{ inputs.xmi }}
+        INPUT_JSONSCHEMA_OUTPUT_DIR: ${{ inputs["jsonschema-output-dir"] }}
+        INPUT_JSONSCHEMA_PACKAGES: ${{ inputs["jsonschema-packages"] }}
+        INPUT_USERNAME: ${{ inputs.username }}
+        INPUT_PASSWORD: ${{ inputs.password }}
+      run: |
+        set -euo pipefail
+
+        schema_args=()
+        if [[ -n "${INPUT_URL}" ]]; then
+          schema_args+=(--url "${INPUT_URL}")
+        fi
+        if [[ -n "${INPUT_XMI}" ]]; then
+          schema_args+=(--xmi "${INPUT_XMI}")
+        fi
+        if [[ -n "${INPUT_JSONSCHEMA_OUTPUT_DIR}" ]]; then
+          schema_args+=(--output-dir "${INPUT_JSONSCHEMA_OUTPUT_DIR}")
+        fi
+        if [[ -n "${INPUT_USERNAME}" ]]; then
+          schema_args+=(--username "${INPUT_USERNAME}")
+        fi
+        if [[ -n "${INPUT_PASSWORD}" ]]; then
+          schema_args+=(--password "${INPUT_PASSWORD}")
+        fi
+        if [[ -n "${INPUT_JSONSCHEMA_PACKAGES}" ]]; then
+          while IFS= read -r pkg; do
+            [[ -z "${pkg}" ]] && continue
+            schema_args+=(--package "${pkg}")
+          done <<< "${INPUT_JSONSCHEMA_PACKAGES}"
+        fi
+
+        if [[ ${#schema_args[@]} -eq 0 ]]; then
+          echo "You must supply either 'url' or 'xmi' input." >&2
+          exit 1
+        fi
+
+        python "${GITHUB_ACTION_PATH}/../transform_xmi_to_jsonschema.py" "${schema_args[@]}"
+
+branding:
+  icon: file-text
+  color: blue
