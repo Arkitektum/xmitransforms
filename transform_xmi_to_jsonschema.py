@@ -171,6 +171,7 @@ class XMIModel:
         self.package_name_by_id: Dict[str, str] = {}
         self.comments_by_element: Dict[str, List[str]] = {}
         self.begreps_by_element: Dict[str, str] = {}
+        self.elements_by_concept: Dict[str, List[str]] = {}
         self.nullable_properties: Set[str] = set()
         self.code_metadata: Dict[str, Dict[str, str]] = {}
         self.restrictions: Dict[str, Dict[str, str]] = {}
@@ -257,6 +258,7 @@ class XMIModel:
             url = clean_htmlish(node.get("begrepsreferanse"))
             if url:
                 self.begreps_by_element[target] = url
+                self.elements_by_concept.setdefault(url, []).append(target)
 
     def _collect_nullbar(self) -> None:
         for node in self.root.findall(".//br:Nullbar", NS):
@@ -386,6 +388,11 @@ class XMIModel:
     def get_begrepsreferanse(self, element_id: str) -> Optional[str]:
         return self.begreps_by_element.get(element_id)
 
+    def elements_with_concept(self, concept: Optional[str]) -> List[str]:
+        if not concept:
+            return []
+        return list(self.elements_by_concept.get(concept, []))
+
     def get_package_metadata(self, package_id: str) -> Dict[str, Optional[str]]:
         return self.losningsmodell_meta.get(package_id, {})
 
@@ -423,6 +430,13 @@ class XMIModel:
         if element is None:
             return []
         return element.findall("ownedAttribute")
+
+    def classes_in_package(self, package_id: str) -> List[str]:
+        return [
+            elem_id
+            for elem_id, elem_type in self.element_type_by_id.items()
+            if elem_type == "uml:Class" and self.descends_from_package(elem_id, package_id)
+        ]
 
     def is_nullable(self, element_id: Optional[str]) -> bool:
         return bool(element_id) and element_id in self.nullable_properties
@@ -520,6 +534,31 @@ class JsonSchemaBuilder:
             )
         root_def_name = self.ensure_definition(root_class_id)
         schema = self._build_root_schema(package_meta, root_def_name, root_class_id)
+        concept = package_meta.get("begrepsreferanse")
+        for class_id in self.model.classes_in_package(self.package_id):
+            if class_id == root_class_id:
+                continue
+            if class_id in self.model.selection_classes:
+                continue
+            try:
+                self.ensure_definition(class_id)
+            except TransformationError:
+                continue
+        for element_id in self.model.elements_with_concept(concept):
+            elem_type = self.model.element_type_by_id.get(element_id)
+            if elem_type not in {"uml:Class", "uml:DataType", "uml:PrimitiveType", "uml:Enumeration"}:
+                continue
+            if elem_type == "uml:Class" and element_id in self.model.selection_classes:
+                continue
+            try:
+                self.ensure_definition(element_id)
+            except TransformationError:
+                continue
+        for primitive_id in self.model.code_metadata.keys():
+            try:
+                self.ensure_definition(primitive_id)
+            except TransformationError:
+                continue
         if self.definitions:
             schema["definitions"] = self.definitions
         return schema
