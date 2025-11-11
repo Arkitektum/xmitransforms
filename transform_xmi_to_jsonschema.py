@@ -11,6 +11,7 @@ import re
 import sys
 import unicodedata
 import urllib.request
+from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -57,6 +58,7 @@ PRIMITIVE_TYPE_MAP: Dict[str, Dict[str, Any]] = {
 }
 
 HTML_TAG_RE = re.compile(r"<[^>]+>")
+ANCHOR_TEXT_RE = re.compile(r"<a\b[^>]*>(.*?)</a>", re.IGNORECASE | re.DOTALL)
 WHITESPACE_RE = re.compile(r"\s+")
 
 XMI_NAMESPACES = (
@@ -109,14 +111,34 @@ def extract_href(value: str) -> Optional[str]:
     return None
 
 
+def _is_meaningful_href(value: str) -> bool:
+    parsed = urlparse(value)
+    if not parsed.scheme:
+        return False
+    if parsed.scheme in {"http", "https", "ftp"}:
+        return bool(parsed.netloc)
+    return bool(parsed.netloc or parsed.path)
+
+
 def clean_htmlish(value: Optional[str]) -> str:
     if not value:
         return ""
     unescaped = html.unescape(value)
     href = extract_href(unescaped)
-    if href:
+    if href and _is_meaningful_href(href):
         return href
+    anchor_text = extract_anchor_text(unescaped)
+    if anchor_text:
+        return anchor_text
     text = HTML_TAG_RE.sub(" ", unescaped)
+    return clean_whitespace(text)
+
+
+def extract_anchor_text(value: str) -> Optional[str]:
+    match = ANCHOR_TEXT_RE.search(value)
+    if not match:
+        return None
+    text = HTML_TAG_RE.sub(" ", match.group(1))
     return clean_whitespace(text)
 
 
