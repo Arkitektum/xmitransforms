@@ -566,31 +566,6 @@ class JsonSchemaBuilder:
             )
         root_def_name = self.ensure_definition(root_class_id)
         schema = self._build_root_schema(package_meta, root_def_name, root_class_id)
-        concept = package_meta.get("begrepsreferanse")
-        for class_id in self.model.classes_in_package(self.package_id):
-            if class_id == root_class_id:
-                continue
-            if class_id in self.model.selection_classes:
-                continue
-            try:
-                self.ensure_definition(class_id)
-            except TransformationError:
-                continue
-        for element_id in self.model.elements_with_concept(concept):
-            elem_type = self.model.element_type_by_id.get(element_id)
-            if elem_type not in {"uml:Class", "uml:DataType", "uml:PrimitiveType", "uml:Enumeration"}:
-                continue
-            if elem_type == "uml:Class" and element_id in self.model.selection_classes:
-                continue
-            try:
-                self.ensure_definition(element_id)
-            except TransformationError:
-                continue
-        for primitive_id in self.model.code_metadata.keys():
-            try:
-                self.ensure_definition(primitive_id)
-            except TransformationError:
-                continue
         if self.definitions:
             schema["definitions"] = self.definitions
         return schema
