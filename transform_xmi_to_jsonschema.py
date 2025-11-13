@@ -560,12 +560,24 @@ class JsonSchemaBuilder:
     def build(self) -> Dict[str, Any]:
         package_meta = self.model.get_package_metadata(self.package_id)
         root_class_id = self.model.get_root_class(self.package_id)
-        if not root_class_id:
-            raise TransformationError(
-                f"Fant ikke rotelement for løsningsmodellen '{self.package_name}'"
+        primary_required = True
+        root_candidates: List[str]
+        if root_class_id:
+            root_candidates = [root_class_id]
+        else:
+            fallback_classes = self.model.classes_in_package(self.package_id)
+            if not fallback_classes:
+                raise TransformationError(
+                    f"Fant ikke rotelement for løsningsmodellen '{self.package_name}'"
+                )
+            primary_required = False
+            root_candidates = fallback_classes
+            print(
+                f"Advarsel: løsningsmodellen '{self.package_name}' mangler Rotelement, oppretter schema med {len(root_candidates)} rotobjekter.",
+                file=sys.stderr,
             )
-        root_def_name = self.ensure_definition(root_class_id)
-        schema = self._build_root_schema(package_meta, root_def_name, root_class_id)
+        root_entries = [(class_id, self.ensure_definition(class_id)) for class_id in root_candidates]
+        schema = self._build_root_schema(package_meta, root_entries, primary_required)
         if self.definitions:
             schema["definitions"] = self.definitions
         return schema
@@ -573,8 +585,8 @@ class JsonSchemaBuilder:
     def _build_root_schema(
         self,
         package_meta: Dict[str, Optional[str]],
-        root_def_name: str,
-        root_class_id: str,
+        root_entries: Sequence[Tuple[str, str]],
+        require_primary: bool,
     ) -> Dict[str, Any]:
         navnerom = package_meta.get("navnerom")
         versjon = package_meta.get("versjon")
@@ -591,8 +603,25 @@ class JsonSchemaBuilder:
             metadata["beskrivelseForSkjema"] = beskrivelse
         if begrep:
             metadata["begrepsreferanse"] = begrep
-        root_class_name = self.model.element_name_by_id.get(root_class_id, root_class_id)
-        root_property = root_class_name[:1].lower() + root_class_name[1:]
+        properties: Dict[str, Any] = {
+            "identifikatorForSkjema": {
+                "type": "string",
+                "description": "Navnerom/identifikator til skjemaet",
+            },
+            "versjonsnummerForSkjema": {
+                "type": "string",
+                "description": "Versjonsnummeret til skjemaet",
+            },
+        }
+        required: List[str] = []
+        taken_names = set(properties.keys())
+        for idx, (class_id, def_name) in enumerate(root_entries):
+            class_name = self.model.element_name_by_id.get(class_id, class_id)
+            prop_name = self._derive_root_property_name(class_name or f"element{idx+1}", taken_names)
+            properties[prop_name] = {"$ref": f"#/definitions/{def_name}"}
+            taken_names.add(prop_name)
+            if require_primary and idx == 0:
+                required.append(prop_name)
         schema: Dict[str, Any] = {
             "$schema": "http://json-schema.org/draft-07/schema#",
             "$id": navnerom or "",
@@ -600,18 +629,8 @@ class JsonSchemaBuilder:
             "additionalProperties": False,
             "title": self.package_name,
             "description": json.dumps(metadata, ensure_ascii=False),
-            "properties": {
-                root_property: {"$ref": f"#/definitions/{root_def_name}"},
-                "identifikatorForSkjema": {
-                    "type": "string",
-                    "description": "Navnerom/identifikator til skjemaet",
-                },
-                "versjonsnummerForSkjema": {
-                    "type": "string",
-                    "description": "Versjonsnummeret til skjemaet",
-                },
-            },
-            "required": [root_property],
+            "properties": properties,
+            "required": required,
         }
         if status:
             schema["properties"]["statusForSkjema"] = {
@@ -621,6 +640,17 @@ class JsonSchemaBuilder:
         if begrep:
             schema["x-skos-concept"] = begrep
         return schema
+
+    def _derive_root_property_name(self, raw_name: str, taken: Set[str]) -> str:
+        base = raw_name[:1].lower() + raw_name[1:] if raw_name else "rotObjekt"
+        if not base:
+            base = "rotObjekt"
+        candidate = base
+        suffix = 2
+        while candidate in taken:
+            candidate = f"{base}_{suffix}"
+            suffix += 1
+        return candidate
 
     def ensure_definition(self, element_id: str) -> str:
         if element_id in self.definition_name_by_id:
@@ -955,9 +985,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         raise TransformationError("Fant ingen løsningsmodeller i XMI-filen.")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for package_id in target_packages:
-        metadata = model.get_package_metadata(package_id)
-        if not metadata.get("navnerom"):
-            continue
         builder = JsonSchemaBuilder(model, package_id)
         try:
             schema = builder.build()
