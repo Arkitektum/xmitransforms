@@ -1,0 +1,2 @@
+# Only pytest is required for the provided tests; the CLI uses Python's standard library.
+pytest>=7.4
