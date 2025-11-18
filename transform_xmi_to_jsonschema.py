@@ -66,6 +66,21 @@ XMI_NAMESPACES = (
     "http://www.omg.org/XMI",
 )
 
+NORWEGIAN_TRANSLATION = str.maketrans(
+    {
+        "\u00e6": "ae",
+        "\u00c6": "AE",
+        "\u00f8": "oe",
+        "\u00d8": "OE",
+        "\u00e5": "aa",
+        "\u00c5": "AA",
+    }
+)
+
+
+def translate_norwegian(text: str) -> str:
+    return text.translate(NORWEGIAN_TRANSLATION)
+
 
 def get_xmi_attribute(element: ET.Element, local_name: str) -> Optional[str]:
     for namespace in XMI_NAMESPACES:
@@ -149,7 +164,8 @@ def normalize_primitive_name(name: Optional[str]) -> Optional[str]:
 
 
 def slugify(value: str) -> str:
-    normalized = unicodedata.normalize("NFKD", value)
+    translated = translate_norwegian(value)
+    normalized = unicodedata.normalize("NFKD", translated)
     ascii_value = normalized.encode("ascii", "ignore").decode("ascii")
     slug = re.sub(r"[^A-Za-z0-9]+", "_", ascii_value).strip("_")
     if not slug:
@@ -230,8 +246,9 @@ class XMIModel:
                 self.element_type_by_id[elem_id] = elem_type
             name = elem.get("name")
             if name:
-                self.element_name_by_id[elem_id] = name
-                self.elements_by_name.setdefault(name, []).append(elem_id)
+                translated = translate_norwegian(name)
+                self.element_name_by_id[elem_id] = translated
+                self.elements_by_name.setdefault(translated, []).append(elem_id)
 
     def _assign_packages(self) -> None:
         def walk(node: ET.Element, current_package: Optional[str]) -> None:
@@ -711,6 +728,7 @@ class JsonSchemaBuilder:
                 continue
             if not attr_name:
                 continue
+            attr_name = translate_norwegian(attr_name)
             schema = self._build_property_schema(attr, type_ref)
             properties[attr_name] = schema
             lower, _ = self.model.get_multiplicity(attr)
@@ -754,6 +772,7 @@ class JsonSchemaBuilder:
             attr_name = attr.get("name")
             if not attr_name:
                 continue
+            attr_name = translate_norwegian(attr_name)
             try:
                 type_ref = self.model.resolve_type(attr)
             except TransformationError as exc:
@@ -769,7 +788,11 @@ class JsonSchemaBuilder:
 
     def _build_enumeration_definition(self, element_id: str) -> Dict[str, Any]:
         element = self.model.elements_by_id[element_id]
-        values = [literal.get("name") for literal in element.findall("ownedLiteral") if literal.get("name")]
+        values = []
+        for literal in element.findall("ownedLiteral"):
+            name = literal.get("name")
+            if name:
+                values.append(translate_norwegian(name))
         schema: Dict[str, Any] = {
             "title": self.model.element_name_by_id.get(element_id, element_id),
             "type": "string",

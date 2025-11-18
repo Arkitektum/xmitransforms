@@ -14,21 +14,72 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple, cast
 
-UML_NS = "omg.org/UML1.3"
+UML_NAMESPACES = (
+    "http://www.omg.org/spec/UML/20131001",
+    "http://www.nomagic.com/magicdraw/UML/2.5.1.1",
+    "omg.org/UML1.3",
+)
+UML_NS = UML_NAMESPACES[0]
 NS = {"UML": UML_NS}
+XMI_NS = "http://www.omg.org/spec/XMI/20131001"
+XMI_ID = f"{{{XMI_NS}}}id"
+XMI_IDREF = f"{{{XMI_NS}}}idref"
+XMI_TYPE = f"{{{XMI_NS}}}type"
 
-NORWEGIAN_TRANSLATION = str.maketrans({
-    "\u00e6": "e",
-    "\u00c6": "e",
-    "\u00f8": "o",
-    "\u00d8": "o",
-    "\u00e5": "a",
-    "\u00c5": "a",
-})
+NORWEGIAN_TRANSLATION = str.maketrans(
+    {
+        "\u00e6": "ae",
+        "\u00c6": "AE",
+        "\u00f8": "oe",
+        "\u00d8": "OE",
+        "\u00e5": "aa",
+        "\u00c5": "AA",
+    }
+)
 
 
 def translate_norwegian(text: str) -> str:
     return text.translate(NORWEGIAN_TRANSLATION)
+
+
+def _get_xmi_attr(node: ET.Element, local_name: str) -> Optional[str]:
+    return (
+        node.get(f"{{{XMI_NS}}}{local_name}")
+        or node.get(f"xmi.{local_name}")
+        or node.get(f"xmi:{local_name}")
+    )
+
+
+def get_xmi_id(node: ET.Element) -> Optional[str]:
+    return _get_xmi_attr(node, "id")
+
+
+def get_xmi_idref(node: ET.Element) -> Optional[str]:
+    return _get_xmi_attr(node, "idref")
+
+
+def get_xmi_type(node: ET.Element) -> Optional[str]:
+    return _get_xmi_attr(node, "type")
+
+
+def iter_elements_by_type(root: ET.Element, local_name: str) -> Iterator[ET.Element]:
+    seen: Set[int] = set()
+    for namespace in UML_NAMESPACES:
+        tag = f"{{{namespace}}}{local_name}"
+        for node in root.findall(f".//{tag}"):
+            node_id = id(node)
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            yield node
+    target_type = f"uml:{local_name}"
+    for node in root.iter():
+        if get_xmi_type(node) == target_type:
+            node_id = id(node)
+            if node_id in seen:
+                continue
+            seen.add(node_id)
+            yield node
 
 OBJID_FIELD = {
     "id": "objid",
@@ -49,8 +100,8 @@ class Model:
         self.classes_by_id: Dict[str, ET.Element] = {}
         self.classes_by_name: Dict[str, ET.Element] = {}
 
-        for cls in root.findall(".//UML:Class", NS):
-            class_id = cls.get("xmi.id")
+        for cls in iter_elements_by_type(root, "Class"):
+            class_id = get_xmi_id(cls)
             if class_id:
                 self.classes_by_id[class_id] = cls
             name = cls.get("name")
@@ -65,8 +116,8 @@ class Model:
 
         self.enumerations_by_id: Dict[str, ET.Element] = {}
         self.enumerations_by_name: Dict[str, ET.Element] = {}
-        for enum in root.findall(".//UML:Enumeration", NS):
-            enum_id = enum.get("xmi.id")
+        for enum in iter_elements_by_type(root, "Enumeration"):
+            enum_id = get_xmi_id(enum)
             if enum_id:
                 self.enumerations_by_id[enum_id] = enum
             name = enum.get("name")
@@ -217,7 +268,7 @@ def extract_tagged_values(node: ET.Element) -> Dict[str, str]:
 def get_stereotype(node: ET.Element) -> str:
     stereotype = node.find("UML:ModelElement.stereotype/UML:Stereotype", NS)
     if stereotype is not None:
-        stereo_name = stereotype.get("name") or stereotype.get("xmi.idref")
+        stereo_name = stereotype.get("name") or get_xmi_idref(stereotype)
         if stereo_name:
             return stereo_name
     tagged = extract_tagged_values(node)
@@ -233,7 +284,7 @@ def attribute_type_reference(attribute: ET.Element) -> Optional[str]:
     type_node = attribute.find("UML:StructuralFeature.type/UML:Classifier", NS)
     if type_node is None:
         return None
-    return type_node.get("xmi.idref")
+    return get_xmi_idref(type_node)
 
 
 def collect_attribute_paths(
@@ -247,7 +298,7 @@ def collect_attribute_paths(
     type_visited = set() if type_visited is None else set(type_visited)
 
     class_node = model.class_by_name(class_name)
-    class_id = class_node.get("xmi.id")
+    class_id = get_xmi_id(class_node)
     if class_id and class_id in super_visited:
         return
     if class_id:
@@ -349,9 +400,15 @@ def build_resources(model: Model) -> List[Dict[str, object]]:
     feature_types = [
         name
         for name, node in model.classes_by_name.items()
-        if get_stereotype(node) == "FeatureType"
+        if get_stereotype(node).lower() == "featuretype"
         and node.get("isAbstract", "").lower() != "true"
     ]
+    if not feature_types:
+        feature_types = [
+            name
+            for name, node in model.classes_by_name.items()
+            if node.get("isAbstract", "").lower() != "true"
+        ]
 
     resources: List[Dict[str, object]] = []
     used_keys: Set[str] = set()

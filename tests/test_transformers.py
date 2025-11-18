@@ -51,7 +51,7 @@ def test_jsonschema_transformer(tmp_path):
     )
 
     assert result.returncode == 0, result.stderr
-    schema_file = output_dir / "lsningsmodellnavn.schema.json"
+    schema_file = output_dir / "loesningsmodellnavn.schema.json"
     assert schema_file.exists()
     data = json.loads(schema_file.read_text(encoding="utf-8"))
     assert "$schema" in data
@@ -83,7 +83,7 @@ def test_jsonschema_transformer_includes_specializations(tmp_path):
     kunde_schema = bestilling["properties"]["kunde"]
     assert "oneOf" in kunde_schema
     refs = {entry["$ref"] for entry in kunde_schema["oneOf"]}
-    assert "#/definitions/Akt\u00f8r" in refs
+    assert "#/definitions/Aktoer" in refs
     assert "#/definitions/Person" in refs
     assert "Person" in data["definitions"]
 
@@ -110,6 +110,6 @@ def test_jsonschema_transformer_skips_unused_definitions(tmp_path):
     assert schema_file.exists()
     data = json.loads(schema_file.read_text(encoding="utf-8"))
     definitions = data["definitions"]
-    expected = {"Bestilling", "Akt\u00f8r", "Virksomhet", "Person", "Organisasjonsnummer", "F\u00f8dselsnummer"}
+    expected = {"Bestilling", "Aktoer", "Virksomhet", "Person", "Organisasjonsnummer", "Foedselsnummer"}
     assert set(definitions) == expected
-    assert "St\u00f8ttetiltakstype" not in definitions
+    assert "Stoettetiltakstype" not in definitions
