@@ -214,6 +214,7 @@ class XMIModel:
         self.nullable_properties: Set[str] = set()
         self.code_metadata: Dict[str, Dict[str, str]] = {}
         self.restrictions: Dict[str, Dict[str, str]] = {}
+        self.restriction_tag_keys: Dict[str, str] = {}
         self.root_classes: Dict[str, str] = {}
         self.losningsmodell_meta: Dict[str, Dict[str, Optional[str]]] = {}
         self.minst_en_classes: Set[str] = set()
@@ -228,7 +229,9 @@ class XMIModel:
         self._collect_begrepsreferanse()
         self._collect_nullbar()
         self._collect_code_metadata()
+        self._collect_restriction_tag_ids()
         self._collect_restrictions()
+        self._collect_tagged_value_restrictions()
         self._collect_package_metadata()
         self._collect_root_classes()
         self._collect_selection_classes()
@@ -322,6 +325,21 @@ class XMIModel:
             if info:
                 self.code_metadata[base] = info
 
+
+
+    def _collect_restriction_tag_ids(self) -> None:
+        for node in self.root.findall(".//tag"):
+            tag_id = node.get("tagID")
+            name = node.get("name")
+            if not tag_id or not name:
+                continue
+            parts = name.split(":")
+            if len(parts) < 3:
+                continue
+            if parts[0] != "BRProfil" or not parts[1].startswith("Restriksjon"):
+                continue
+            self.restriction_tag_keys[tag_id] = parts[-1]
+
     def _collect_restrictions(self) -> None:
         for node in self.root.findall(".//br:Restriksjon", NS):
             target = (
@@ -338,6 +356,44 @@ class XMIModel:
                 if local_key.startswith("base_") or local_key in {"id"}:
                     continue
                 data[local_key] = value
+
+
+
+
+    def _collect_tagged_value_restrictions(self) -> None:
+        if not self.restriction_tag_keys:
+            return
+        for element_id, element in self.elements_by_id.items():
+            tagged_values = element.findall("taggedValue")
+            if not tagged_values:
+                continue
+            for tagged in tagged_values:
+                tag_def = tagged.find("tagDefinition")
+                if tag_def is None:
+                    continue
+                href = tag_def.get("href")
+                if not href:
+                    continue
+                tag_id = href.split("#")[-1] if "#" in href else href
+                key = self.restriction_tag_keys.get(tag_id)
+                if not key:
+                    continue
+                value = self._extract_tagged_value(tagged)
+                if value is None:
+                    continue
+                data = self.restrictions.setdefault(element_id, {})
+                data[key] = value
+
+    def _extract_tagged_value(self, node: ET.Element) -> Optional[str]:
+        value_node = node.find("value")
+        if value_node is not None:
+            text_value = value_node.text
+            if text_value:
+                return text_value.strip()
+        attr_value = node.get("value")
+        if attr_value:
+            return attr_value.strip()
+        return None
 
     def _collect_package_metadata(self) -> None:
         for node in self.root.findall(".//br:Løsningsmodell", NS):
