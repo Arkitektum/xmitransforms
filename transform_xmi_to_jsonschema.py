@@ -696,7 +696,7 @@ class JsonSchemaBuilder:
             if require_primary and idx == 0:
                 required.append(prop_name)
         schema: Dict[str, Any] = {
-            "$schema": "http://json-schema.org/draft-07/schema#",
+            "$schema": "http://json-schema.org/draft-06/schema#",
             "$id": navnerom or "",
             "type": "object",
             "additionalProperties": False,

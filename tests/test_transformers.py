@@ -54,7 +54,7 @@ def test_jsonschema_transformer(tmp_path):
     schema_file = output_dir / "loesningsmodellnavn.schema.json"
     assert schema_file.exists()
     data = json.loads(schema_file.read_text(encoding="utf-8"))
-    assert "$schema" in data
+    assert data["$schema"] == "http://json-schema.org/draft-06/schema#"
     assert "resources" not in data
 
 
