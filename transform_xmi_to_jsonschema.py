@@ -12,7 +12,7 @@ import sys
 import unicodedata
 import urllib.request
 from urllib.parse import urlparse
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple

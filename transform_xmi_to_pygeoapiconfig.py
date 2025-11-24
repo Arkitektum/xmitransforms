@@ -10,7 +10,7 @@ import sys
 import unicodedata
 import urllib.request
 from urllib.parse import quote, urlsplit, urlunsplit
-import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as ET
 from pathlib import Path
 from typing import Dict, Iterable, Iterator, List, Optional, Sequence, Set, Tuple, cast
 

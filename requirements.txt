@@ -1,3 +1,4 @@
 # Only pytest is required for the provided tests; the CLI uses Python's standard library.
 pytest>=7.4
 jsonschema>=4.21
+defusedxml>=0.7.1
